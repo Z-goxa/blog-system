@@ -14,7 +14,7 @@ func TestGenerateSlug(t *testing.T) {
 		{"普通英文标题", "Hello World", "hello-world-"},
 		{"混合大小写", "Go Programming 101", "go-programming-101-"},
 		{"中文+英文", "你好 Golang", "golang-"},
-		{"纯特殊字符", "!!! ???", "post-"},
+		{"纯特殊字符", "!!! ???", "tag-"},
 		{"开头和结尾有空格/连字符", "- Spaces Around -", "spaces-around-"},
 		{"连续符号", "a---b___c", "a-b-c-"},
 	}
@@ -39,11 +39,11 @@ func TestGenerateSlug(t *testing.T) {
 func TestGenerateSlugEmpty(t *testing.T) {
 	t.Run("空字符串", func(t *testing.T) {
 		got := generateSlug("")
-		if len(got) <= len("post-") {
+		if len(got) <= len("tag-") {
 			t.Errorf("空输入应使用默认前缀，got %q", got)
 		}
-		if got[:5] != "post-" {
-			t.Errorf("空输入应以前缀 post- 开头，got %q", got)
+		if got[:4] != "tag-" {
+			t.Errorf("空输入应以前缀 tag- 开头，got %q", got)
 		}
 	})
 }

@@ -1,0 +1,11 @@
+{
+  "name": "blog-system",
+  "outputfilename": "blog-system",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev": "npm run dev",
+  "frontend:dir": "../frontend",
+  "wailsjsdir": "../frontend/src/wailsjs",
+  "version": "v2.12.0"
+}

@@ -1,1 +1,1 @@
-# miniature-lgm
+# blog-system

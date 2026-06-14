@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -157,6 +158,21 @@ func StartAPIServer() {
 			return
 		}
 
+		// SEO 基础文件：让搜索引擎明确知道站点可抓取，以及 sitemap 位置。
+		if r.URL.Path == "/robots.txt" && r.Method == http.MethodGet {
+			server.handleRobots(w, r)
+			return
+		}
+		if r.URL.Path == "/sitemap.xml" && r.Method == http.MethodGet {
+			server.handleSitemap(w, r)
+			return
+		}
+		// 静态 SEO 文章页：给搜索引擎完整 HTML 内容，避免只抓到 SPA 空壳。
+		if strings.HasPrefix(r.URL.Path, "/posts/") && r.Method == http.MethodGet {
+			server.handleSEOPost(w, r)
+			return
+		}
+
 		// 根路径直接返回 index.html
 		if r.URL.Path == "/" {
 			filePath := "./frontend/dist/index.html"
@@ -235,6 +251,156 @@ func StartAPIServer() {
 	if err := http.ListenAndServe(addr, server.corsMiddleware(handler)); err != nil {
 		log.Fatalf("❌ API 服务启动失败: %v", err)
 	}
+}
+
+const publicSiteURL = "https://xgxa.org"
+
+func (s *APIServer) handleRobots(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	fmt.Fprintf(w, "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n", publicSiteURL)
+}
+
+func (s *APIServer) handleSitemap(w http.ResponseWriter, r *http.Request) {
+	type sitemapPost struct {
+		Slug        string
+		UpdatedAt   time.Time
+		PublishedAt *time.Time
+	}
+	var posts []sitemapPost
+	if err := s.blog.db.Model(&Post{}).
+		Select("slug", "updated_at", "published_at").
+		Where("status = ? AND type = ?", "published", "post").
+		Order("COALESCE(published_at, created_at) DESC").
+		Find(&posts).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "生成 sitemap 失败: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n"))
+	w.Write([]byte(`<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` + "\n"))
+	fmt.Fprintf(w, "  <url><loc>%s/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>\n", publicSiteURL)
+	for _, post := range posts {
+		lastmod := post.UpdatedAt
+		if post.PublishedAt != nil && post.PublishedAt.After(lastmod) {
+			lastmod = *post.PublishedAt
+		}
+		fmt.Fprintf(w, "  <url><loc>%s/posts/%s</loc><lastmod>%s</lastmod><changefreq>weekly</changefreq><priority>0.8</priority></url>\n",
+			publicSiteURL,
+			html.EscapeString(post.Slug),
+			lastmod.Format("2006-01-02"),
+		)
+	}
+	w.Write([]byte("</urlset>\n"))
+}
+
+func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
+	slug := strings.Trim(strings.TrimPrefix(r.URL.Path, "/posts/"), "/")
+	if slug == "" {
+		http.Redirect(w, r, "/", http.StatusFound)
+		return
+	}
+	var post Post
+	if err := s.blog.db.Preload("Category").Preload("Tags").
+		Where("slug = ? AND status = ?", slug, "published").
+		First(&post).Error; err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write([]byte("<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\"><title>文章不存在 - 风雪之隅</title></head><body><h1>文章不存在</h1><p><a href=\"/\">返回首页</a></p></body></html>"))
+		return
+	}
+
+	description := strings.TrimSpace(post.Excerpt)
+	if description == "" {
+		description = strings.TrimSpace(stripHTML(post.ContentHTML))
+	}
+	if len([]rune(description)) > 160 {
+		r := []rune(description)
+		description = string(r[:160]) + "…"
+	}
+	canonical := publicSiteURL + "/posts/" + post.Slug
+	appURL := publicSiteURL + "/#/blog/" + post.Slug
+	category := ""
+	if post.Category != nil {
+		category = post.Category.Name
+	}
+	keywords := []string{"景龙", "风雪之隅", category}
+	for _, tag := range post.Tags {
+		keywords = append(keywords, tag.Name)
+	}
+	published := ""
+	if post.PublishedAt != nil {
+		published = post.PublishedAt.Format(time.RFC3339)
+	}
+	body := post.ContentHTML
+	if strings.TrimSpace(body) == "" {
+		body = "<p>" + html.EscapeString(post.ContentMarkdown) + "</p>"
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>%s - 风雪之隅</title>
+  <meta name="description" content="%s">
+  <meta name="keywords" content="%s">
+  <link rel="canonical" href="%s">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="%s">
+  <meta property="og:description" content="%s">
+  <meta property="og:url" content="%s">
+  <meta property="og:site_name" content="风雪之隅">
+  <meta name="twitter:card" content="summary">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":%q,"description":%q,"url":%q,"datePublished":%q,"dateModified":%q,"author":{"@type":"Person","name":"景龙"},"publisher":{"@type":"Organization","name":"风雪之隅"}}</script>
+  <style>body{margin:0;background:#f7f7f4;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",Arial,sans-serif;line-height:1.8}.wrap{max-width:860px;margin:0 auto;padding:42px 22px 72px}.site{font-size:14px;color:#777;text-decoration:none}.card{background:#fff;border:1px solid #eee;border-radius:18px;padding:34px;box-shadow:0 10px 32px rgba(0,0,0,.04)}h1{font-size:34px;line-height:1.25;margin:18px 0 12px}h2{margin-top:34px;border-bottom:1px solid #eee;padding-bottom:6px}pre{overflow:auto;background:#1f2937;color:#f8fafc;padding:16px;border-radius:12px}code{font-family:"SFMono-Regular",Consolas,monospace}.meta{color:#888;font-size:14px;margin-bottom:28px}.entry img{max-width:100%;height:auto}.open{display:inline-block;margin-top:28px;color:#7a5c2e;text-decoration:none}.footer{text-align:center;color:#999;font-size:13px;margin-top:36px}</style>
+</head>
+<body>
+  <main class="wrap">
+    <a class="site" href="/">风雪之隅 · 景龙的个人博客</a>
+    <article class="card">
+      <h1>%s</h1>
+      <div class="meta">%s%s</div>
+      <div class="entry">%s</div>
+      <a class="open" href="%s">在博客应用中打开 →</a>
+    </article>
+    <div class="footer">© %d 风雪之隅 · xgxa.org</div>
+  </main>
+</body>
+</html>`,
+		html.EscapeString(post.Title), html.EscapeString(description), html.EscapeString(strings.Join(keywords, ",")), html.EscapeString(canonical),
+		html.EscapeString(post.Title), html.EscapeString(description), html.EscapeString(canonical),
+		post.Title, description, canonical, published, post.UpdatedAt.Format(time.RFC3339),
+		html.EscapeString(post.Title), html.EscapeString(category), publishedMeta(post.PublishedAt), body, html.EscapeString(appURL), time.Now().Year())
+}
+
+func publishedMeta(t *time.Time) string {
+	if t == nil {
+		return ""
+	}
+	return " · " + html.EscapeString(t.Format("2006-01-02"))
+}
+
+func stripHTML(s string) string {
+	var b strings.Builder
+	inTag := false
+	for _, r := range s {
+		switch r {
+		case '<':
+			inTag = true
+		case '>':
+			inTag = false
+		default:
+			if !inTag {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
 }
 
 func (s *APIServer) corsMiddleware(next http.Handler) http.Handler {

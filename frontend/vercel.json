@@ -5,7 +5,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://fotos-keeps-farms-combined.trycloudflare.com/api/:path*"
+      "destination": "https://jesse-voluntary-inherited-rank.trycloudflare.com/api/:path*"
     }
   ]
 }

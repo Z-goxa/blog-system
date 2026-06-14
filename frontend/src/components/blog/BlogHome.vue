@@ -47,7 +47,7 @@
             </header>
 
             <div class="post-byline">
-              <span class="author">laruence</span>
+              <span class="author">xgxa</span>
               <span class="separator">·</span>
               <span class="date">{{ formatDate(post.published_at || post.created_at) }}</span>
               <span class="separator">·</span>

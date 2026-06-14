@@ -76,10 +76,12 @@
         </div>
 
         <div class="side-block">
-          <h4>友情链接</h4>
+          <h4>常用链接</h4>
           <ul class="archive-list">
-            <li><a href="https://www.php.net" target="_blank" rel="noopener">PHP官方</a></li>
-            <li><a href="https://github.com/laruence" target="_blank" rel="noopener">Github</a></li>
+            <li><a href="https://docs.openclaw.ai" target="_blank" rel="noopener">OpenClaw 文档</a></li>
+            <li><a href="https://github.com" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://go.dev" target="_blank" rel="noopener">Go 语言</a></li>
+            <li><a href="https://vuejs.org" target="_blank" rel="noopener">Vue.js</a></li>
           </ul>
         </div>
       </aside>
@@ -87,7 +89,9 @@
 
     <footer class="blog-footer">
       <div class="footer-inner">
-        &copy; 风雪之隅 / 博客声明 / 京ICP备 / PHP 8.1.0-NTS(JIT) / Theme inspired by laruence
+        <span>&copy; {{ currentYear }} 风雪之隅 · 景龙的个人博客</span>
+        <span>文章为个人学习与实践记录，转载请注明出处</span>
+        <span>Powered by Go + Vue 3 + MariaDB</span>
       </div>
     </footer>
   </div>
@@ -100,6 +104,7 @@ import { API_BASE } from '../../services/api.js'
 
 const route = useRoute()
 const router = useRouter()
+const currentYear = new Date().getFullYear()
 const categories = ref([])
 const archives = ref([])
 const recentComments = ref([])

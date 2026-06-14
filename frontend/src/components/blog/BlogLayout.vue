@@ -49,6 +49,19 @@
         </div>
 
         <div class="side-block">
+          <h4>最新文章</h4>
+          <ul class="latest-post-list">
+            <li v-if="latestPosts.length === 0" class="archive-empty">暂无文章</li>
+            <li v-for="post in latestPosts" :key="post.id" class="latest-post-item">
+              <router-link :to="`/blog/${post.slug}`" class="latest-post-link">
+                <span class="latest-post-title">{{ post.title }}</span>
+                <span class="latest-post-date">{{ formatPostDate(post.published_at || post.created_at) }}</span>
+              </router-link>
+            </li>
+          </ul>
+        </div>
+
+        <div class="side-block">
           <h4>归档</h4>
           <ul class="archive-list">
             <li v-if="archives.length === 0" class="archive-empty">暂无归档</li>
@@ -107,6 +120,7 @@ const router = useRouter()
 const currentYear = new Date().getFullYear()
 const categories = ref([])
 const archives = ref([])
+const latestPosts = ref([])
 const recentComments = ref([])
 const searchPrompt = ref(String(route.query.q || ''))
 
@@ -149,6 +163,13 @@ const formatCommentDate = (s) => {
   return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
+const formatPostDate = (s) => {
+  if (!s) return ''
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return ''
+  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+}
+
 const loadArchives = async () => {
   try {
     const response = await fetch(`${API_BASE}/public/archives`)
@@ -161,6 +182,21 @@ const loadArchives = async () => {
   } catch (error) {
     console.error('加载归档失败:', error)
     archives.value = []
+  }
+}
+
+const loadLatestPosts = async () => {
+  try {
+    const response = await fetch(`${API_BASE}/public/posts?page=1&page_size=5`)
+    if (!response.ok) {
+      const text = await response.text()
+      throw new Error(text || `HTTP ${response.status}`)
+    }
+    const result = await response.json()
+    latestPosts.value = Array.isArray(result.posts) ? result.posts : []
+  } catch (error) {
+    console.error('加载最新文章失败:', error)
+    latestPosts.value = []
   }
 }
 
@@ -182,6 +218,7 @@ const loadRecentComments = async () => {
 onMounted(() => {
   loadCategories()
   loadArchives()
+  loadLatestPosts()
   loadRecentComments()
 })
 </script>
@@ -405,6 +442,42 @@ onMounted(() => {
   font-size: 12px;
 }
 .archive-list a:hover {
+  color: #111;
+  text-decoration: underline;
+}
+.latest-post-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.latest-post-item {
+  border-bottom: 1px dashed #e5e7eb;
+  padding: 8px 0;
+}
+.latest-post-item:first-child {
+  padding-top: 0;
+}
+.latest-post-item:last-child {
+  border-bottom: 0;
+}
+.latest-post-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.latest-post-title {
+  display: block;
+  color: #555;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.latest-post-date {
+  display: block;
+  color: #9ca3af;
+  font-size: 11.5px;
+  margin-top: 2px;
+}
+.latest-post-link:hover .latest-post-title {
   color: #111;
   text-decoration: underline;
 }

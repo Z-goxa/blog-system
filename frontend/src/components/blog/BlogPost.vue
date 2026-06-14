@@ -9,7 +9,7 @@
         <div class="post-byline">
           Published on
           <a class="date">{{ formatDate(post.published_at || post.created_at) }}</a>
-          by <a class="author">laruence</a>
+          by <a class="author">xgxa</a>
           <span class="dot">·</span>
           <span>{{ post.view_count || 0 }} views</span>
         </div>

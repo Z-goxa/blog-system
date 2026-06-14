@@ -172,6 +172,14 @@ func StartAPIServer() {
 			server.handleFeed(w, r)
 			return
 		}
+		if r.URL.Path == "/sitemap" && r.Method == http.MethodGet {
+			server.handleSitemapPage(w, r)
+			return
+		}
+		if r.URL.Path == "/rss" && r.Method == http.MethodGet {
+			server.handleRSSPage(w, r)
+			return
+		}
 		// 静态 SEO 文章页：给搜索引擎完整 HTML 内容，避免只抓到 SPA 空壳。
 		if strings.HasPrefix(r.URL.Path, "/posts/") && r.Method == http.MethodGet {
 			server.handleSEOPost(w, r)
@@ -404,6 +412,74 @@ func (s *APIServer) handleFeed(w http.ResponseWriter, r *http.Request) {
 			xmlEscape(post.Title), xmlEscape(link), xmlEscape(link), pub.Format(time.RFC1123Z), xmlEscape(desc))
 	}
 	w.Write([]byte("</channel></rss>\n"))
+}
+
+func (s *APIServer) handleSitemapPage(w http.ResponseWriter, r *http.Request) {
+	var posts []Post
+	if err := s.blog.db.Preload("Category").
+		Where("status = ? AND type = ?", "published", "post").
+		Order("COALESCE(published_at, created_at) DESC").
+		Find(&posts).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "读取站点地图失败: "+err.Error())
+		return
+	}
+
+	var list strings.Builder
+	list.WriteString(`<li><a href="/">首页</a><span>https://xgxa.org/</span></li>`)
+	for _, post := range posts {
+		date := ""
+		if post.PublishedAt != nil {
+			date = post.PublishedAt.Format("2006-01-02")
+		}
+		category := ""
+		if post.Category != nil {
+			category = " · " + post.Category.Name
+		}
+		fmt.Fprintf(&list, `<li><a href="/posts/%s">%s</a><span>%s%s</span></li>`,
+			html.EscapeString(post.Slug), html.EscapeString(post.Title), html.EscapeString(date), html.EscapeString(category))
+	}
+
+	s.renderUtilityPage(w, "站点地图", "这里列出风雪之隅当前可公开访问的主要页面和文章。", "/sitemap", list.String(), `<p class="hint">XML 版本供搜索引擎使用：<a href="/sitemap.xml">sitemap.xml</a></p>`)
+}
+
+func (s *APIServer) handleRSSPage(w http.ResponseWriter, r *http.Request) {
+	var posts []Post
+	if err := s.blog.db.Where("status = ? AND type = ?", "published", "post").
+		Order("COALESCE(published_at, created_at) DESC").
+		Limit(20).
+		Find(&posts).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "读取 RSS 页面失败: "+err.Error())
+		return
+	}
+
+	var list strings.Builder
+	for _, post := range posts {
+		date := ""
+		if post.PublishedAt != nil {
+			date = post.PublishedAt.Format("2006-01-02")
+		}
+		fmt.Fprintf(&list, `<li><a href="/posts/%s">%s</a><span>%s</span></li>`, html.EscapeString(post.Slug), html.EscapeString(post.Title), html.EscapeString(date))
+	}
+	extra := `<p class="hint">如果你使用 RSS 阅读器，请订阅：<code>https://xgxa.org/feed.xml</code></p><p class="hint"><a href="/feed.xml">打开 RSS XML 源</a></p>`
+	s.renderUtilityPage(w, "RSS 订阅", "你可以通过 RSS 阅读器订阅风雪之隅的最新文章。下面是最近更新的文章。", "/rss", list.String(), extra)
+}
+
+func (s *APIServer) renderUtilityPage(w http.ResponseWriter, title, description, pagePath, listHTML, extraHTML string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>%s - 风雪之隅</title>
+  <meta name="description" content="%s">
+  <link rel="canonical" href="%s/%s">
+  <style>body{margin:0;background:#f7f7f4;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",Arial,sans-serif;line-height:1.8}.wrap{max-width:900px;margin:0 auto;padding:42px 22px 72px}.site{font-size:14px;color:#777;text-decoration:none}.card{background:#fff;border:1px solid #eee;border-radius:18px;padding:34px;box-shadow:0 10px 32px rgba(0,0,0,.04)}h1{font-size:32px;margin:16px 0 8px}.desc{color:#777;margin-bottom:26px}.link-list{list-style:none;padding:0;margin:0}.link-list li{padding:12px 0;border-bottom:1px dashed #e5e7eb}.link-list a{display:block;color:#7a5c2e;text-decoration:none;font-size:16px}.link-list a:hover{text-decoration:underline}.link-list span{display:block;color:#999;font-size:13px;margin-top:2px}.hint{color:#777}code{background:#f3f4f6;padding:2px 6px;border-radius:6px}.footer{text-align:center;color:#999;font-size:13px;margin-top:36px}</style>
+</head>
+<body><main class="wrap"><a class="site" href="/">风雪之隅 · 景龙的个人博客</a><article class="card"><h1>%s</h1><p class="desc">%s</p><ul class="link-list">%s</ul>%s</article><div class="footer">© %d 风雪之隅 · xgxa.org</div></main></body>
+</html>`,
+		html.EscapeString(title), html.EscapeString(description), publicSiteURL, strings.TrimPrefix(pagePath, "/"), html.EscapeString(title), html.EscapeString(description), listHTML, extraHTML, time.Now().Year())
 }
 
 func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {

@@ -90,7 +90,7 @@
     <footer class="blog-footer">
       <div class="footer-inner">
         <span>&copy; {{ currentYear }} 风雪之隅 · 景龙的个人博客</span>
-        <span>文章为个人学习与实践记录，转载请注明出处</span>
+        <span>网址：<a href="https://xgxa.org/">xgxa.org</a> · 文章为个人学习与实践记录，转载请注明出处</span>
         <span>Powered by Go + Vue 3 + MariaDB</span>
       </div>
     </footer>
@@ -479,7 +479,19 @@ onMounted(() => {
   font-size: 12px;
   color: #999;
   font-weight: 300;
-  text-align: left;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.footer-inner a {
+  color: #666;
+  text-decoration: none;
+}
+.footer-inner a:hover {
+  color: #333;
+  text-decoration: underline;
 }
 
 /* ===== 响应式 ===== */

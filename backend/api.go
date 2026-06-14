@@ -180,18 +180,7 @@ func StartAPIServer() {
 
 		// 根路径直接返回 index.html
 		if r.URL.Path == "/" {
-			filePath := "./frontend/dist/index.html"
-			content, err := os.ReadFile(filePath)
-			if err != nil {
-				log.Printf("❌ 无法读取 index.html: %v", err)
-				w.WriteHeader(404)
-				w.Write([]byte("404 - Not Found"))
-				return
-			}
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
-			w.Header().Set("Pragma", "no-cache")
-			w.Write(content)
+			server.handleSEOHome(w, r)
 			return
 		}
 
@@ -264,6 +253,85 @@ func (s *APIServer) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=3600")
 	fmt.Fprintf(w, "User-agent: *\nAllow: /\n\nSitemap: %s/sitemap.xml\n", publicSiteURL)
+}
+
+func (s *APIServer) handleSEOHome(w http.ResponseWriter, r *http.Request) {
+	content, err := os.ReadFile("./frontend/dist/index.html")
+	if err != nil {
+		log.Printf("❌ 无法读取 index.html: %v", err)
+		w.WriteHeader(404)
+		w.Write([]byte("404 - Not Found"))
+		return
+	}
+	indexHTML := string(content)
+
+	var posts []Post
+	if err := s.blog.db.Preload("Category").
+		Where("status = ? AND type = ?", "published", "post").
+		Order("COALESCE(published_at, created_at) DESC").
+		Limit(8).
+		Find(&posts).Error; err != nil {
+		log.Printf("⚠️ 首页 SEO 文章列表读取失败: %v", err)
+	}
+
+	seoBlock := s.homeSEOBlock(posts)
+	structured := s.homeStructuredData(posts)
+	if strings.Contains(indexHTML, "</head>") {
+		indexHTML = strings.Replace(indexHTML, "</head>", structured+"\n</head>", 1)
+	}
+	if strings.Contains(indexHTML, `<div id="app"></div>`) {
+		indexHTML = strings.Replace(indexHTML, `<div id="app"></div>`, `<div id="app"></div>`+seoBlock, 1)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=300")
+	w.Write([]byte(indexHTML))
+}
+
+func (s *APIServer) homeSEOBlock(posts []Post) string {
+	var b strings.Builder
+	b.WriteString(`<section class="seo-home" aria-label="博客最新文章" style="max-width:1240px;margin:32px auto 56px;padding:0 32px;color:#555;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC',Arial,sans-serif;line-height:1.8">`)
+	b.WriteString(`<h1 style="font-size:24px;color:#333;margin:0 0 8px">风雪之隅 - 景龙的个人博客</h1>`)
+	b.WriteString(`<p style="margin:0 0 18px;color:#777">记录 Go、Vue、AI 工具、OpenClaw、生活养护与个人实践经验。</p>`)
+	b.WriteString(`<h2 style="font-size:18px;color:#444;margin:20px 0 10px">最新文章</h2><ul style="padding-left:20px;margin:0">`)
+	for _, post := range posts {
+		link := "/posts/" + post.Slug
+		date := ""
+		if post.PublishedAt != nil {
+			date = post.PublishedAt.Format("2006-01-02")
+		}
+		fmt.Fprintf(&b, `<li style="margin:8px 0"><a style="color:#7a5c2e;text-decoration:none" href="%s">%s</a> <span style="color:#999">%s</span><br><span style="color:#777">%s</span></li>`,
+			html.EscapeString(link), html.EscapeString(post.Title), html.EscapeString(date), html.EscapeString(post.Excerpt))
+	}
+	b.WriteString(`</ul><p style="margin-top:18px"><a style="color:#7a5c2e" href="/sitemap.xml">站点地图</a> · <a style="color:#7a5c2e" href="/feed.xml">RSS 订阅</a></p></section>`)
+	return b.String()
+}
+
+func (s *APIServer) homeStructuredData(posts []Post) string {
+	type item struct {
+		Type     string `json:"@type"`
+		Position int    `json:"position"`
+		URL      string `json:"url"`
+		Name     string `json:"name"`
+	}
+	items := make([]item, 0, len(posts))
+	for i, post := range posts {
+		items = append(items, item{Type: "ListItem", Position: i + 1, URL: publicSiteURL + "/posts/" + post.Slug, Name: post.Title})
+	}
+	data := map[string]interface{}{
+		"@context":    "https://schema.org",
+		"@type":       "Blog",
+		"name":        "风雪之隅 - 景龙的个人博客",
+		"url":         publicSiteURL + "/",
+		"description": "记录 Go、Vue、AI 工具、OpenClaw、生活养护与个人实践经验。",
+		"author":      map[string]string{"@type": "Person", "name": "景龙"},
+		"blogPost":    items,
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return `<script type="application/ld+json">` + string(raw) + `</script>`
 }
 
 func (s *APIServer) handleSitemap(w http.ResponseWriter, r *http.Request) {

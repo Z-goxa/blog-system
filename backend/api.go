@@ -282,13 +282,9 @@ func (s *APIServer) handleSEOHome(w http.ResponseWriter, r *http.Request) {
 		log.Printf("⚠️ 首页 SEO 文章列表读取失败: %v", err)
 	}
 
-	seoBlock := s.homeSEOBlock(posts)
 	structured := s.homeStructuredData(posts)
 	if strings.Contains(indexHTML, "</head>") {
 		indexHTML = strings.Replace(indexHTML, "</head>", structured+"\n</head>", 1)
-	}
-	if strings.Contains(indexHTML, `<div id="app"></div>`) {
-		indexHTML = strings.Replace(indexHTML, `<div id="app"></div>`, `<div id="app"></div>`+seoBlock, 1)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

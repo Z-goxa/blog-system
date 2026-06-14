@@ -101,8 +101,8 @@
         <div class="side-block site-resource-block">
           <h4>站点资源</h4>
           <ul class="archive-list">
-            <li><a href="/sitemap.xml" target="_blank" rel="noopener">站点地图</a></li>
-            <li><a href="/feed.xml" target="_blank" rel="noopener">RSS 订阅</a></li>
+            <li><a href="/sitemap" target="_blank" rel="noopener">站点地图</a></li>
+            <li><a href="/rss" target="_blank" rel="noopener">RSS 订阅</a></li>
           </ul>
         </div>
       </aside>

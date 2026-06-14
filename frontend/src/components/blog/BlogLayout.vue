@@ -208,7 +208,7 @@ onMounted(() => {
   z-index: 10;
 }
 .topbar-inner {
-  max-width: 1140px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 0 32px;
 }
@@ -264,12 +264,12 @@ onMounted(() => {
 }
 /* ===== 主体两栏 ===== */
 .blog-main {
-  max-width: 1140px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 36px 32px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
-  gap: 40px;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 32px;
   align-items: start;
 }
 
@@ -290,15 +290,15 @@ onMounted(() => {
 }
 .profile-avatar-frame {
   float: left;
-  width: 110px;
-  height: 180px;
+  width: 86px;
+  height: 140px;
   border: 1px solid #d9e2f1;
   border-radius: 10px;
   padding: 4px;
   background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   box-shadow: 0 8px 22px rgba(37, 99, 235, 0.12);
   overflow: hidden;
-  margin-right: 14px;
+  margin-right: 12px;
   margin-bottom: 10px;
 }
 .profile-avatar {
@@ -311,7 +311,7 @@ onMounted(() => {
 }
 .profile-name {
   font-weight: 700;
-  font-size: 18px;
+  font-size: 17px;
   color: #1f2937;
   margin-bottom: 4px;
   letter-spacing: 0.4px;
@@ -327,7 +327,7 @@ onMounted(() => {
   margin-bottom: 10px;
 }
 .profile-intro {
-  font-size: 12.8px;
+  font-size: 12.5px;
   color: #667085;
   line-height: 1.75;
   margin: 0;
@@ -473,7 +473,7 @@ onMounted(() => {
   margin-top: 60px;
 }
 .footer-inner {
-  max-width: 1140px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 20px 32px;
   font-size: 12px;

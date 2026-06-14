@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"html"
 	"io"
@@ -167,6 +168,10 @@ func StartAPIServer() {
 			server.handleSitemap(w, r)
 			return
 		}
+		if r.URL.Path == "/feed.xml" && r.Method == http.MethodGet {
+			server.handleFeed(w, r)
+			return
+		}
 		// 静态 SEO 文章页：给搜索引擎完整 HTML 内容，避免只抓到 SPA 空壳。
 		if strings.HasPrefix(r.URL.Path, "/posts/") && r.Method == http.MethodGet {
 			server.handleSEOPost(w, r)
@@ -296,6 +301,43 @@ func (s *APIServer) handleSitemap(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("</urlset>\n"))
 }
 
+func (s *APIServer) handleFeed(w http.ResponseWriter, r *http.Request) {
+	var posts []Post
+	if err := s.blog.db.Preload("Category").Preload("Tags").
+		Where("status = ? AND type = ?", "published", "post").
+		Order("COALESCE(published_at, created_at) DESC").
+		Limit(30).
+		Find(&posts).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "生成 RSS 失败: "+err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/rss+xml; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=1800")
+	w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?>` + "\n"))
+	w.Write([]byte(`<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>` + "\n"))
+	fmt.Fprintf(w, "<title>%s</title>\n", xmlEscape("风雪之隅 - 景龙的个人博客"))
+	fmt.Fprintf(w, "<link>%s/</link>\n", publicSiteURL)
+	fmt.Fprintf(w, "<atom:link href=\"%s/feed.xml\" rel=\"self\" type=\"application/rss+xml\" />\n", publicSiteURL)
+	fmt.Fprintf(w, "<description>%s</description>\n", xmlEscape("记录 Go、Vue、AI 工具、OpenClaw、生活养护与个人实践经验。"))
+	fmt.Fprintf(w, "<language>zh-CN</language>\n")
+	fmt.Fprintf(w, "<lastBuildDate>%s</lastBuildDate>\n", time.Now().Format(time.RFC1123Z))
+	for _, post := range posts {
+		link := publicSiteURL + "/posts/" + post.Slug
+		pub := post.CreatedAt
+		if post.PublishedAt != nil {
+			pub = *post.PublishedAt
+		}
+		desc := strings.TrimSpace(post.Excerpt)
+		if desc == "" {
+			desc = strings.TrimSpace(stripHTML(post.ContentHTML))
+		}
+		fmt.Fprintf(w, "<item>\n<title>%s</title>\n<link>%s</link>\n<guid>%s</guid>\n<pubDate>%s</pubDate>\n<description>%s</description>\n</item>\n",
+			xmlEscape(post.Title), xmlEscape(link), xmlEscape(link), pub.Format(time.RFC1123Z), xmlEscape(desc))
+	}
+	w.Write([]byte("</channel></rss>\n"))
+}
+
 func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
 	slug := strings.Trim(strings.TrimPrefix(r.URL.Path, "/posts/"), "/")
 	if slug == "" {
@@ -338,6 +380,7 @@ func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(body) == "" {
 		body = "<p>" + html.EscapeString(post.ContentMarkdown) + "</p>"
 	}
+	relatedHTML := s.relatedPostsHTML(post.Slug)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "public, max-age=300")
@@ -357,7 +400,7 @@ func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
   <meta property="og:site_name" content="风雪之隅">
   <meta name="twitter:card" content="summary">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"BlogPosting","headline":%q,"description":%q,"url":%q,"datePublished":%q,"dateModified":%q,"author":{"@type":"Person","name":"景龙"},"publisher":{"@type":"Organization","name":"风雪之隅"}}</script>
-  <style>body{margin:0;background:#f7f7f4;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",Arial,sans-serif;line-height:1.8}.wrap{max-width:860px;margin:0 auto;padding:42px 22px 72px}.site{font-size:14px;color:#777;text-decoration:none}.card{background:#fff;border:1px solid #eee;border-radius:18px;padding:34px;box-shadow:0 10px 32px rgba(0,0,0,.04)}h1{font-size:34px;line-height:1.25;margin:18px 0 12px}h2{margin-top:34px;border-bottom:1px solid #eee;padding-bottom:6px}pre{overflow:auto;background:#1f2937;color:#f8fafc;padding:16px;border-radius:12px}code{font-family:"SFMono-Regular",Consolas,monospace}.meta{color:#888;font-size:14px;margin-bottom:28px}.entry img{max-width:100%;height:auto}.open{display:inline-block;margin-top:28px;color:#7a5c2e;text-decoration:none}.footer{text-align:center;color:#999;font-size:13px;margin-top:36px}</style>
+  <style>body{margin:0;background:#f7f7f4;color:#333;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans SC",Arial,sans-serif;line-height:1.8}.wrap{max-width:860px;margin:0 auto;padding:42px 22px 72px}.site{font-size:14px;color:#777;text-decoration:none}.card{background:#fff;border:1px solid #eee;border-radius:18px;padding:34px;box-shadow:0 10px 32px rgba(0,0,0,.04)}h1{font-size:34px;line-height:1.25;margin:18px 0 12px}h2{margin-top:34px;border-bottom:1px solid #eee;padding-bottom:6px}pre{overflow:auto;background:#1f2937;color:#f8fafc;padding:16px;border-radius:12px}code{font-family:"SFMono-Regular",Consolas,monospace}.meta{color:#888;font-size:14px;margin-bottom:28px}.entry img{max-width:100%;height:auto}.related{margin-top:34px;padding-top:18px;border-top:1px solid #eee}.related h2{font-size:20px;border:0;margin:0 0 10px}.related a{color:#7a5c2e;text-decoration:none}.related a:hover{text-decoration:underline}.open{display:inline-block;margin-top:28px;color:#7a5c2e;text-decoration:none}.footer{text-align:center;color:#999;font-size:13px;margin-top:36px}</style>
 </head>
 <body>
   <main class="wrap">
@@ -366,6 +409,7 @@ func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
       <h1>%s</h1>
       <div class="meta">%s%s</div>
       <div class="entry">%s</div>
+      %s
       <a class="open" href="%s">在博客应用中打开 →</a>
     </article>
     <div class="footer">© %d 风雪之隅 · xgxa.org</div>
@@ -375,7 +419,24 @@ func (s *APIServer) handleSEOPost(w http.ResponseWriter, r *http.Request) {
 		html.EscapeString(post.Title), html.EscapeString(description), html.EscapeString(strings.Join(keywords, ",")), html.EscapeString(canonical),
 		html.EscapeString(post.Title), html.EscapeString(description), html.EscapeString(canonical),
 		post.Title, description, canonical, published, post.UpdatedAt.Format(time.RFC3339),
-		html.EscapeString(post.Title), html.EscapeString(category), publishedMeta(post.PublishedAt), body, html.EscapeString(appURL), time.Now().Year())
+		html.EscapeString(post.Title), html.EscapeString(category), publishedMeta(post.PublishedAt), body, relatedHTML, html.EscapeString(appURL), time.Now().Year())
+}
+
+func (s *APIServer) relatedPostsHTML(currentSlug string) string {
+	var posts []Post
+	if err := s.blog.db.Where("status = ? AND type = ? AND slug <> ?", "published", "post", currentSlug).
+		Order("COALESCE(published_at, created_at) DESC").
+		Limit(5).
+		Find(&posts).Error; err != nil || len(posts) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString(`<section class="related"><h2>相关阅读</h2><ul>`)
+	for _, p := range posts {
+		fmt.Fprintf(&b, `<li><a href="/posts/%s">%s</a></li>`, html.EscapeString(p.Slug), html.EscapeString(p.Title))
+	}
+	b.WriteString(`</ul></section>`)
+	return b.String()
 }
 
 func publishedMeta(t *time.Time) string {
@@ -401,6 +462,14 @@ func stripHTML(s string) string {
 		}
 	}
 	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func xmlEscape(s string) string {
+	var b strings.Builder
+	if err := xml.EscapeText(&b, []byte(s)); err != nil {
+		return html.EscapeString(s)
+	}
+	return b.String()
 }
 
 func (s *APIServer) corsMiddleware(next http.Handler) http.Handler {

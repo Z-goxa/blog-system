@@ -303,7 +303,7 @@ func (s *APIServer) homeSEOBlock(posts []Post) string {
 		fmt.Fprintf(&b, `<li style="margin:8px 0"><a style="color:#7a5c2e;text-decoration:none" href="%s">%s</a> <span style="color:#999">%s</span><br><span style="color:#777">%s</span></li>`,
 			html.EscapeString(link), html.EscapeString(post.Title), html.EscapeString(date), html.EscapeString(post.Excerpt))
 	}
-	b.WriteString(`</ul><p style="margin-top:18px"><a style="color:#7a5c2e" href="/sitemap.xml">站点地图</a> · <a style="color:#7a5c2e" href="/feed.xml">RSS 订阅</a></p></section>`)
+	b.WriteString(`</ul></section>`)
 	return b.String()
 }
 
